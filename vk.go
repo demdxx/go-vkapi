@@ -152,6 +152,57 @@ func (vk *Vk) Api(method string, params map[string]interface{}, response interfa
   return vk.get_url(request_url, response)
 }
 
+func (vk *Vk) ApiPost(method string, params map[string]interface{}, postParams map[string]interface{}, response interface{}) error {
+  prms := vk.prepare_params(params)
+
+  // Prepare request url
+  request_url := "/method/" + method + vk.Format + "?" + build_query(prms)
+
+  if len(vk.Secret) > 0 {
+    sig := md5_s(request_url + vk.Secret)
+    request_url = API_URL + request_url + "&sig=" + sig
+  }
+  return vk.post_url(request_url, body, response)
+}
+
+func (vk *Vk) ApiPostFile(method, filepath string, params map[string]interface{}, postParams map[string]interface{}, response interface{}) error {
+  prms := vk.prepare_params(params)
+
+  // Prepare request url
+  request_url := "/method/" + method + vk.Format + "?" + build_query(prms)
+
+  if len(vk.Secret) > 0 {
+    sig := md5_s(request_url + vk.Secret)
+    request_url = API_URL + request_url + "&sig=" + sig
+  }
+  return vk.postFile_url(request_url, filepath, postParams, response)
+}
+
+func (vk *Vk) ApiPostFileBody(method, filename string, body io.Reader, params map[string]interface{}, postParams map[string]interface{}, response interface{}) error {
+  prms := vk.prepare_params(params)
+
+  // Prepare request url
+  request_url := "/method/" + method + vk.Format + "?" + build_query(prms)
+
+  if len(vk.Secret) > 0 {
+    sig := md5_s(request_url + vk.Secret)
+    request_url = API_URL + request_url + "&sig=" + sig
+  }
+  return vk.postFile_url(request_url, filepath, postParams, response)
+}
+
+func (vk *Vk) RawGet(url string, response interface{}) error {
+  return vk.get_url(url, response)
+}
+
+func (vk *Vk) RawPostFile(url, filepath string, postParams map[string]interface{}, response interface{}) error {
+  return vk.postFile_url(url, filepath, postParams, response)
+}
+
+func (vk *Vk) RawPostFileBody(url, filepath string, postParams map[string]interface{}, body io.Reader, response interface{}) error {
+  return vk.postFile_url(url, filepath, postParams, response)
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 /// Helpers
 ///////////////////////////////////////////////////////////////////////////////
@@ -172,6 +223,52 @@ func (vk *Vk) get_url(url string, response interface{}) error {
     } else {
       xml.Unmarshal(data, response)
     }
+    response = prepareResponse(response)
+  }
+  return err
+}
+
+func (vk *Vk) post_url(url string, params map[string]interface{}, response interface{}) error {
+  req, err := newPostRequest(url, params)
+  if nil != err {
+    return err
+  }
+  return processRequest(req)
+}
+
+func (vk *Vk) postFile_url(url, filepath string, params map[string]interface{}, response interface{}) error {
+  req, err := newfileUploadRequest(url, params, "file1", filepath)
+  if nil != err {
+    return err
+  }
+  return processRequest(req)
+}
+
+func (vk *Vk) postFileBody_url(url, filepath string, params map[string]interface{}, body io.Reader, response interface{}) error {
+  req, err := newUploadRequest(url, params, "file1", filepath, body)
+  if nil != err {
+    return err
+  }
+  return processRequest(req)
+}
+
+func (vk *Vk) processRequest(req *http.Request) error {
+  // Send request
+  resp, err := vk.Client.Do(req)
+  if err != nil {
+    return err
+  }
+  defer resp.Body.Close()
+  data, err := ioutil.ReadAll(resp.Body)
+
+  // Process response
+  if nil == err {
+    if vk.IsJsonResponse() {
+      json.Unmarshal(data, response)
+    } else {
+      xml.Unmarshal(data, response)
+    }
+    response = prepareResponse(response)
   }
   return err
 }
@@ -197,14 +294,29 @@ func (vk *Vk) prepare_params(params map[string]interface{}) map[string]interface
   return prms
 }
 
-func build_query(params map[string]interface{}) string {
-  query := make([]string, 0)
-  if nil != params {
-    for k, v := range params {
-      query = append(query, k+"="+url.QueryEscape(v.(string)))
+///////////////////////////////////////////////////////////////////////////////
+/// Nonclass Helpers
+///////////////////////////////////////////////////////////////////////////////
+
+func prepareResponse(resp interface{}) map[string]interface{} {
+  fmt.Println("prepareResponse", resp)
+  if nil != resp {
+    switch resp.(type) {
+    case map[string]interface{}:
+      return resp.(map[string]interface{})
+    case map[interface{}]interface{}:
+      data := make(map[string]interface{})
+      for k, v := range resp.(map[interface{}]interface{}) {
+        data[k.(string)] = v
+      }
+    case map[string]string:
+      data := make(map[string]interface{})
+      for k, v := range resp.(map[string]string) {
+        data[k.(string)] = v
+      }
     }
   }
-  return strings.Join(query, "&")
+  return nil
 }
 
 func md5_s(text string) string {
