@@ -2,13 +2,13 @@ package vkapi
 
 import (
   "bytes"
-  "fmt"
   "io"
-  "log"
   "mime/multipart"
   "net/http"
+  "net/url"
   "os"
   "path/filepath"
+  "strings"
 
   "github.com/demdxx/gocast"
 )
@@ -28,7 +28,7 @@ func newUploadRequest(uri string, params map[string]interface{}, paramName, path
   for key, val := range params {
     _ = writer.WriteField(key, gocast.ToString(val))
   }
-  err = writer.Close()
+  err := writer.Close()
   if err != nil {
     return nil, err
   }

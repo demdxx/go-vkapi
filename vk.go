@@ -27,12 +27,10 @@ import (
   "errors"
   "fmt"
   "io"
-  "strings"
 
   "io/ioutil"
 
   "net/http"
-  "net/url"
 
   "encoding/json"
   "encoding/xml"
@@ -118,6 +116,7 @@ func (vk *Vk) AuthToken() error {
   return err
 }
 
+// Auth by login/password
 func (vk *Vk) AuthDirect(username, password, scope, test_redirect_uri string) (map[string]interface{}, error) {
   params := map[string]interface{}{
     "grant_type":        "password",
@@ -139,6 +138,7 @@ func (vk *Vk) AuthDirect(username, password, scope, test_redirect_uri string) (m
   return response, err
 }
 
+// Request api GET method
 func (vk *Vk) Api(method string, params map[string]interface{}, response interface{}) error {
   prms := vk.prepare_params(params)
 
@@ -152,6 +152,7 @@ func (vk *Vk) Api(method string, params map[string]interface{}, response interfa
   return vk.get_url(request_url, response)
 }
 
+// Request api POST method
 func (vk *Vk) ApiPost(method string, params map[string]interface{}, postParams map[string]interface{}, response interface{}) error {
   prms := vk.prepare_params(params)
 
@@ -162,9 +163,10 @@ func (vk *Vk) ApiPost(method string, params map[string]interface{}, postParams m
     sig := md5_s(request_url + vk.Secret)
     request_url = API_URL + request_url + "&sig=" + sig
   }
-  return vk.post_url(request_url, body, response)
+  return vk.post_url(request_url, nil, response)
 }
 
+// Request api POST file method
 func (vk *Vk) ApiPostFile(method, filepath string, params map[string]interface{}, postParams map[string]interface{}, response interface{}) error {
   prms := vk.prepare_params(params)
 
@@ -178,6 +180,7 @@ func (vk *Vk) ApiPostFile(method, filepath string, params map[string]interface{}
   return vk.postFile_url(request_url, filepath, postParams, response)
 }
 
+// Request api POST file method by byte body
 func (vk *Vk) ApiPostFileBody(method, filename string, body io.Reader, params map[string]interface{}, postParams map[string]interface{}, response interface{}) error {
   prms := vk.prepare_params(params)
 
@@ -188,7 +191,7 @@ func (vk *Vk) ApiPostFileBody(method, filename string, body io.Reader, params ma
     sig := md5_s(request_url + vk.Secret)
     request_url = API_URL + request_url + "&sig=" + sig
   }
-  return vk.postFile_url(request_url, filepath, postParams, response)
+  return vk.postFileBody_url(request_url, filename, postParams, body, response)
 }
 
 func (vk *Vk) RawGet(url string, response interface{}) error {
@@ -233,7 +236,7 @@ func (vk *Vk) post_url(url string, params map[string]interface{}, response inter
   if nil != err {
     return err
   }
-  return processRequest(req)
+  return vk.processRequest(req, response)
 }
 
 func (vk *Vk) postFile_url(url, filepath string, params map[string]interface{}, response interface{}) error {
@@ -241,7 +244,7 @@ func (vk *Vk) postFile_url(url, filepath string, params map[string]interface{}, 
   if nil != err {
     return err
   }
-  return processRequest(req)
+  return vk.processRequest(req, response)
 }
 
 func (vk *Vk) postFileBody_url(url, filepath string, params map[string]interface{}, body io.Reader, response interface{}) error {
@@ -249,10 +252,10 @@ func (vk *Vk) postFileBody_url(url, filepath string, params map[string]interface
   if nil != err {
     return err
   }
-  return processRequest(req)
+  return vk.processRequest(req, response)
 }
 
-func (vk *Vk) processRequest(req *http.Request) error {
+func (vk *Vk) processRequest(req *http.Request, response interface{}) error {
   // Send request
   resp, err := vk.Client.Do(req)
   if err != nil {
@@ -268,7 +271,7 @@ func (vk *Vk) processRequest(req *http.Request) error {
     } else {
       xml.Unmarshal(data, response)
     }
-    response = prepareResponse(response)
+    *response.(*interface{}) = prepareResponse(response)
   }
   return err
 }
@@ -312,7 +315,7 @@ func prepareResponse(resp interface{}) map[string]interface{} {
     case map[string]string:
       data := make(map[string]interface{})
       for k, v := range resp.(map[string]string) {
-        data[k.(string)] = v
+        data[k] = v
       }
     }
   }
